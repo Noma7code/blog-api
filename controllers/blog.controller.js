@@ -22,12 +22,13 @@ const getPublishedBlogs = async (req, res) => {
       .populate("author", "first_name last_name");
     const count = await Blog.countDocuments(query);
     res.json({
+      success: true,
       blogs,
       totalPages: Math.ceil(count / limit),
       currentPage: page,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -39,12 +40,14 @@ const getBlog = async (req, res) => {
       "first_name last_name email"
     );
     if (!blog || blog.state !== "published")
-      return res.status(404).json({ message: "Blog not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Blog not found" });
     blog.read_count += 1;
     await blog.save();
-    res.json(blog);
+    res.json({ success: true, blog });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -57,11 +60,11 @@ const createBlog = async (req, res) => {
       description,
       tags,
       body,
-      author: req.user._id,
+      author: req.userId,
     });
-    res.status(201).json(blog);
+    res.status(201).json({ success: true, blog });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -69,15 +72,20 @@ const createBlog = async (req, res) => {
 const updateBlog = async (req, res) => {
   try {
     const blog = await Blog.findById(req.params.id);
-    if (!blog) return res.status(404).json({ message: "Blog not found" });
-    if (blog.author.toString() !== req.user._id.toString())
-      return res.status(401).json({ message: "Not authorized" });
+    if (!blog)
+      return res
+        .status(404)
+        .json({ success: false, message: "Blog not found" });
+    if (blog.author.toString() !== req.userId.toString())
+      return res
+        .status(401)
+        .json({ success: false, message: "Not authorized" });
 
     Object.assign(blog, req.body);
     await blog.save();
-    res.json(blog);
+    res.json({ success: true, blog });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -85,22 +93,29 @@ const updateBlog = async (req, res) => {
 const deleteBlog = async (req, res) => {
   try {
     const blog = await Blog.findById(req.params.id);
-    if (!blog) return res.status(404).json({ message: "Blog not found" });
-    if (blog.author.toString() !== req.user._id.toString())
-      return res.status(401).json({ message: "Not authorized" });
+    if (!blog)
+      return res
+        .status(404)
+        .json({ success: false, message: "Blog not found" });
+    if (blog.author.toString() !== req.userId.toString())
+      return res
+        .status(401)
+        .json({ success: false, message: "Not authorized" });
 
     await blog.deleteOne();
-    res.json({ message: "Blog deleted" });
+    res.json({ success: true, message: "Blog deleted" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 // Get own blogs (protected)
 const getOwnBlogs = async (req, res) => {
-  const { page = 1, limit = 20, state } = req.query;
-  const query = { author: req.user._id };
-  if (state) query.state = state;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+
+  const query = { author: req.userId };
+  if (req.query.state) query.state = req.query.state;
 
   try {
     const blogs = await Blog.find(query)
@@ -108,12 +123,13 @@ const getOwnBlogs = async (req, res) => {
       .skip((page - 1) * limit);
     const count = await Blog.countDocuments(query);
     res.json({
+      success: true,
       blogs,
       totalPages: Math.ceil(count / limit),
       currentPage: page,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 

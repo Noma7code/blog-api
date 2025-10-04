@@ -1,5 +1,5 @@
-const User = require("../models/User");
-const jwt = require("jsonwebtoken");
+const User = require("../models/user.model");
+const sendToken = require("../utils/sendToken");
 
 // Signup
 const signup = async (req, res) => {
@@ -12,15 +12,7 @@ const signup = async (req, res) => {
         .json({ success: false, message: "User already exists" });
 
     const user = await User.create({ first_name, last_name, email, password });
-    const token = jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "1h" });
-    res.status(201).json({
-      success: true,
-      _id: user._id,
-      first_name,
-      last_name,
-      email,
-      token,
-    });
+    sendToken(user, 201, res);
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -32,19 +24,58 @@ const signin = async (req, res) => {
   try {
     const user = await User.findOne({ email });
     if (!user || !(await user.comparePassword(password))) {
-      return res.status(401).json({ message: "Invalid email or password" });
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid email or password" });
     }
-    const token = jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "1h" });
-    res.json({
-      _id: user._id,
-      first_name: user.first_name,
-      last_name: user.last_name,
-      email,
-      token,
-    });
+    sendToken(user, 200, res);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-module.exports = { signup, signin };
+// Logout user
+const logoutUser = async (req, res) => {
+  try {
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
+
+    return res
+      .status(200)
+      .json({ success: true, message: "Logged out successfully" });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Delete account
+const deleteUserAccount = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const deletedUser = await User.findByIdAndDelete(userId);
+
+    if (!deletedUser) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+    // Clear cookie after deleting
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "User account deleted successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { signup, signin, logoutUser, deleteUserAccount };
