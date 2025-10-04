@@ -1,6 +1,13 @@
 const Blog = require("../models/blog.model");
 const getUserIdByName = require("../utils/getUserByName");
 
+// Utility function to calculate reading time
+const calculateReadingTime = (text) => {
+  const wordsPerMinute = 200; // average reading speed
+  const words = text.split(/\s+/).length;
+  return Math.ceil(words / wordsPerMinute); // in minutes
+};
+
 // Get published blogs (public)
 const getPublishedBlogs = async (req, res) => {
   const { page = 1, limit = 20, author, title, tags, orderBy } = req.query;
@@ -32,19 +39,35 @@ const getPublishedBlogs = async (req, res) => {
   }
 };
 
-// Get single published blog (public)
+// Get single blog (public + owner)
 const getBlog = async (req, res) => {
   try {
     const blog = await Blog.findById(req.params.id).populate(
       "author",
       "first_name last_name email"
     );
-    if (!blog || blog.state !== "published")
+
+    if (!blog)
       return res
         .status(404)
         .json({ success: false, message: "Blog not found" });
-    blog.read_count += 1;
-    await blog.save();
+
+    // Allow owner to view draft
+    if (
+      blog.state !== "published" &&
+      blog.author._id.toString() !== req.userId
+    ) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Blog not found" });
+    }
+
+    // Increment read count only for published blogs
+    if (blog.state === "published") {
+      blog.read_count += 1;
+      await blog.save();
+    }
+
     res.json({ success: true, blog });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -61,6 +84,10 @@ const createBlog = async (req, res) => {
       tags,
       body,
       author: req.userId,
+      state: "draft",
+      read_count: 0,
+      reading_time: calculateReadingTime(body),
+      timestamp: new Date(),
     });
     res.status(201).json({ success: true, blog });
   } catch (error) {
@@ -76,12 +103,23 @@ const updateBlog = async (req, res) => {
       return res
         .status(404)
         .json({ success: false, message: "Blog not found" });
-    if (blog.author.toString() !== req.userId.toString())
+
+    if (blog.author.toString() !== req.userId)
       return res
         .status(401)
         .json({ success: false, message: "Not authorized" });
 
-    Object.assign(blog, req.body);
+    // Restrict editable fields
+    const { title, description, tags, body, state } = req.body;
+    if (title) blog.title = title;
+    if (description) blog.description = description;
+    if (tags) blog.tags = tags;
+    if (body) {
+      blog.body = body;
+      blog.reading_time = calculateReadingTime(body); // recalc reading time
+    }
+    if (state) blog.state = state; // owner can publish
+
     await blog.save();
     res.json({ success: true, blog });
   } catch (error) {
@@ -97,7 +135,8 @@ const deleteBlog = async (req, res) => {
       return res
         .status(404)
         .json({ success: false, message: "Blog not found" });
-    if (blog.author.toString() !== req.userId.toString())
+
+    if (blog.author.toString() !== req.userId)
       return res
         .status(401)
         .json({ success: false, message: "Not authorized" });
@@ -113,15 +152,23 @@ const deleteBlog = async (req, res) => {
 const getOwnBlogs = async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
+  const { state, orderBy } = req.query;
 
   const query = { author: req.userId };
-  if (req.query.state) query.state = req.query.state;
+  if (state) query.state = state;
+
+  let sort = {};
+  if (orderBy === "read_count") sort.read_count = -1;
+  else if (orderBy === "reading_time") sort.reading_time = -1;
+  else if (orderBy === "timestamp") sort.timestamp = -1;
 
   try {
     const blogs = await Blog.find(query)
-      .limit(limit * 1)
+      .sort(sort)
+      .limit(limit)
       .skip((page - 1) * limit);
     const count = await Blog.countDocuments(query);
+
     res.json({
       success: true,
       blogs,
