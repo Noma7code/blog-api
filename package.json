@@ -4,6 +4,7 @@
   "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",
+    "swagger": "node swagger.js",
     "test": "jest"
   },
   "keywords": [],
@@ -16,11 +17,15 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "jest": "^30.2.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.19.0",
-    "morgan": "^1.10.1"
+    "morgan": "^1.10.1",
+    "supertest": "^7.1.4"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "swagger-autogen": "^2.23.7",
+    "swagger-ui-express": "^5.0.1"
   }
 }
